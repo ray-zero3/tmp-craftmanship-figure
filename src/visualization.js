@@ -26,7 +26,7 @@ export function getSessionId() {
  */
 export async function loadData() {
   try {
-    const response = await fetch('/.craftlog/S_2026-02-24_17ef7e96.jsonl');
+    const response = await fetch('/.craftlog/merged.jsonl');
     const jsonlText = await response.text();
     const parsed = parseJsonl(jsonlText);
     events = parsed.events;

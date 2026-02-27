@@ -498,6 +498,7 @@ export function drawCell(g, event, cellX, cellY, cellW, cellH, rng, scale = 1, c
     borderAlpha = Math.round(lerp(150, 255, promptRatio));
   }
 
+  console.log(event.aiPromptLength);
   g.stroke(0, borderAlpha);
   g.strokeWeight(borderWeight);
   g.noFill();
