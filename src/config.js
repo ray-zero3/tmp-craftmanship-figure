@@ -82,11 +82,11 @@ export const LEWITT_CONFIG = {
   marginRatio: 0.05,  // 5% margin
 
   // Grid
-  maxEvents: 800,
+  maxEvents: 530,
   sampling: 'uniform',  // 'uniform' | 'weighted'
   order: 'time',        // 'time' | 'severity' | 'type_blocks'
-  minGridSize: 8,
-  maxGridSize: 40,
+  minGridSize: 5,
+  maxGridSize: 27,
 
   // Hatching
   hatching: {
@@ -94,7 +94,6 @@ export const LEWITT_CONFIG = {
     angles: {
       edit_human: 45,
       edit_ai: 135,
-      ai_prompt: 45,   // same as human (user prompting AI)
       snapshot: 0,
       mode_change: 90,
       policy_violation: [45, 135],  // cross-hatch
