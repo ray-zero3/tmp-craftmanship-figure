@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Craftlog Data Visualization</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: #ffffff;
+      overflow: hidden;
+    }
+    #canvas-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100vw;
+      height: 100vh;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    canvas {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+    }
+    #info {
+      position: fixed;
+      top: 80px;
+      left: 20px;
+      z-index: 100;
+      background: rgba(26, 26, 46, 0.9);
+      padding: 15px;
+      border-radius: 8px;
+      color: #fff;
+      font-family: monospace;
+    }
+    #controls {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .control-btn {
+      background: #4a4a8a;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      transition: background 0.2s;
+    }
+    .control-btn:hover:not(:disabled) {
+      background: #5a5a9a;
+    }
+    .control-btn:disabled {
+      background: #888;
+      cursor: not-allowed;
+    }
+    .control-btn.secondary {
+      background: #666;
+      font-size: 12px;
+      padding: 8px 16px;
+    }
+    .control-btn.secondary:hover {
+      background: #777;
+    }
+    #render-progress {
+      display: none;
+      background: rgba(26, 26, 46, 0.95);
+      color: #fff;
+      padding: 10px 15px;
+      border-radius: 5px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1 style="position: absolute; left: -9999px;">Craftlog Data Visualization</h1>
+  <div id="info">
+    <p>Canvas: 8600 × 12200 px</p>
+  </div>
+  <div id="controls">
+    <button id="save-png-btn" class="control-btn">Save Preview PNG</button>
+    <button id="render-b1-btn" class="control-btn">Render B1 (8 tiles)</button>
+    <button id="download-instructions-btn" class="control-btn secondary">Instructions.txt</button>
+    <button id="download-summary-btn" class="control-btn secondary">Summary.json</button>
+    <div id="render-progress"></div>
+  </div>
+  <div id="canvas-container"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
