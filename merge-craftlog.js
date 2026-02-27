@@ -41,11 +41,11 @@ async function readJsonlFile(filePath) {
 function getAllJsonlFiles() {
   const files = fs.readdirSync(CRAFTLOG_DIR);
   const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
-  
+
   // merged.jsonlを最初に、他のファイルをソート順で
   const mergedFile = jsonlFiles.find(f => f === 'merged.jsonl');
   const sessionFiles = jsonlFiles.filter(f => f !== 'merged.jsonl').sort();
-  
+
   const result = [];
   if (mergedFile) {
     result.push({ path: path.join(CRAFTLOG_DIR, mergedFile), isMerged: true });
@@ -53,7 +53,7 @@ function getAllJsonlFiles() {
   sessionFiles.forEach(f => {
     result.push({ path: path.join(CRAFTLOG_DIR, f), isMerged: false });
   });
-  
+
   return result;
 }
 
@@ -143,7 +143,7 @@ function recalculateElapsedMs(entries) {
     let maxElapsedInSession = 0;
 
     const sessionStartTs = session.entries[0]?.ts || 0;
-    
+
     for (const entry of session.entries) {
       const newEntry = { ...entry };
       // セッション内の元のelapsed_msを取得
@@ -179,7 +179,7 @@ function printStats(sessions, mergedEntries) {
   console.log('\n=== Merge Statistics ===');
   console.log(`Total sessions: ${sessions.length}`);
   console.log(`Total entries: ${mergedEntries.length}`);
-  
+
   if (mergedEntries.length > 0) {
     const lastEntry = mergedEntries[mergedEntries.length - 1];
     const totalDurationMs = lastEntry.elapsed_ms;
@@ -209,8 +209,8 @@ function printStats(sessions, mergedEntries) {
 async function main() {
   // コマンドライン引数の処理
   const args = process.argv.slice(2);
-  const outputFile = args.includes('-o') 
-    ? args[args.indexOf('-o') + 1] 
+  const outputFile = args.includes('-o')
+    ? args[args.indexOf('-o') + 1]
     : OUTPUT_FILE;
   const keepOriginalElapsed = args.includes('--keep-original');
   const dryRun = args.includes('--dry-run');
@@ -220,7 +220,7 @@ async function main() {
 
   // 全てのJSONLファイルを取得（merged.jsonl + セッションファイル）
   const allFiles = getAllJsonlFiles();
-  
+
   if (allFiles.length === 0) {
     console.log('No JSONL files found.');
     return;

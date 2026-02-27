@@ -487,18 +487,20 @@ export function drawCell(g, event, cellX, cellY, cellW, cellH, rng, scale = 1, c
   const { hatching } = LEWITT_CONFIG;
   const collectedPoints = [];
 
-  // Draw cell border - thicker/darker if this edit follows an ai_prompt
+  // Draw cell border - thicker/darker for events following ai_prompt
   let borderWeight = Math.max(0.5, hatching.cellBorderWeight * scale);
   let borderAlpha = hatching.cellBorderAlpha;
 
-  if (event && event.aiPromptLength > 0) {
+  // Get prompt length from preceding ai_prompt event
+  const promptLength = (event && event.aiPromptLength > 0) ? event.aiPromptLength : 0;
+
+  if (promptLength > 0) {
     // Scale based on prompt length (log scale, 10-1000 chars typical)
-    const promptRatio = clamp(Math.log1p(event.aiPromptLength) / Math.log1p(1000), 0, 1);
-    borderWeight = Math.max(2, lerp(3, 10, promptRatio) * scale);
-    borderAlpha = Math.round(lerp(150, 255, promptRatio));
+    const promptRatio = clamp(Math.log1p(promptLength) / Math.log1p(1000), 0, 1);
+    borderWeight = Math.max(1, lerp(1, 4, promptRatio) * scale);
+    borderAlpha = Math.round(lerp(50, 150 , promptRatio));
   }
 
-  console.log(event.aiPromptLength);
   g.stroke(0, borderAlpha);
   g.strokeWeight(borderWeight);
   g.noFill();
@@ -572,24 +574,7 @@ export function prepareEvents(events, config = LEWITT_CONFIG) {
     }
   }
 
-  // Mark edit events that follow an ai_prompt, and attach prompt length
-  // Track the current active ai_prompt and apply to subsequent AI edits
-  let currentAiPromptLength = 0;
-  for (let i = 0; i < sorted.length; i++) {
-    const evt = sorted[i];
-    if (evt.event === 'ai_prompt' && evt.prompt) {
-      // New ai_prompt - update the current prompt length
-      currentAiPromptLength = evt.prompt.length || 0;
-    } else if (evt.event === 'mode_change' && evt.to === 'human') {
-      // Mode changed to human - reset the ai_prompt tracking
-      currentAiPromptLength = 0;
-    } else if (evt.event === 'edit' && evt.origin_mode === 'ai' && currentAiPromptLength > 0) {
-      // AI edit following an ai_prompt - attach the prompt length
-      evt.aiPromptLength = currentAiPromptLength;
-    }
-  }
-
-  // Filter to edit events primarily, fall back to all if none
+  // Filter to edit events only (ai_prompt affects border thickness via drawLeWittGrid)
   let filtered = sorted.filter(e => e.event === 'edit');
   if (filtered.length === 0) {
     filtered = [...sorted];
@@ -696,9 +681,11 @@ function drawPoints(g, points, size, alpha, scale = 1) {
 export function drawLeWittGrid(g, events, canvasWidth, canvasHeight, config = LEWITT_CONFIG, scale = 1, usePointConnectionMode = true) {
   const seed = config.seed || Date.now();
   const rng = new SeededRandom(seed);
+  const withoutAiPrompts = events.filter(e => e.event !== 'ai_prompt');
+  const aiPrompts = events.filter(e => e.event === 'ai_prompt');
 
   // Prepare events
-  const preparedEvents = prepareEvents(events, config);
+  const preparedEvents = prepareEvents(withoutAiPrompts, config);
 
   // Calculate grid size
   const gridSize = calculateGridSize(preparedEvents.length, config);
@@ -731,6 +718,25 @@ export function drawLeWittGrid(g, events, canvasWidth, canvasHeight, config = LE
       const cellY = margin + row * cellH;
 
       const event = eventIdx < preparedEvents.length ? preparedEvents[eventIdx] : null;
+
+      // Find ai_prompt in the time range between the previous event and this event
+      // If ai_prompt occurred just before this event, make this cell's border thicker
+      if (event) {
+        const prevEvent = eventIdx > 0 ? preparedEvents[eventIdx - 1] : null;
+        const prevElapsed = prevEvent ? (prevEvent.elapsed_ms || 0) : 0;
+        const currentElapsed = event.elapsed_ms || 0;
+
+        // Find ai_prompt events in range (prevElapsed, currentElapsed]
+        const matchingPrompt = aiPrompts.find(p => {
+          const promptElapsed = p.elapsed_ms || 0;
+          return promptElapsed > prevElapsed && promptElapsed <= currentElapsed;
+        });
+
+        if (matchingPrompt && matchingPrompt.raw.prompt) {
+          event.aiPromptLength = matchingPrompt.raw.prompt.length || 0;
+        }
+      }
+
       const cellPoints = drawCell(g, event, cellX, cellY, cellW, cellH, rng, scale, true);
 
       if (cellPoints.length > 0) {
