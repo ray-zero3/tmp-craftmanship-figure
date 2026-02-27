@@ -122,7 +122,7 @@ export async function renderB1Tiles(p, progressCallback) {
 
       // Draw tile to final canvas (scale down from 2x to 1x)
       finalCtx.drawImage(
-        tileGraphics.canvas, 
+        tileGraphics.canvas,
         0, 0, tileWidth * 2, tileHeight * 2,  // source (2x pixel density)
         offsetX, offsetY, tileWidth, tileHeight  // destination
       );

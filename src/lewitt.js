@@ -494,8 +494,8 @@ export function drawCell(g, event, cellX, cellY, cellW, cellH, rng, scale = 1, c
   if (event && event.aiPromptLength > 0) {
     // Scale based on prompt length (log scale, 10-1000 chars typical)
     const promptRatio = clamp(Math.log1p(event.aiPromptLength) / Math.log1p(1000), 0, 1);
-    borderWeight = Math.max(1, lerp(1.5, 4, promptRatio) * scale);
-    borderAlpha = Math.round(lerp(80, 220, promptRatio));
+    borderWeight = Math.max(2, lerp(3, 10, promptRatio) * scale);
+    borderAlpha = Math.round(lerp(150, 255, promptRatio));
   }
 
   g.stroke(0, borderAlpha);
@@ -571,16 +571,20 @@ export function prepareEvents(events, config = LEWITT_CONFIG) {
     }
   }
 
-  // Mark edit events that follow an ai_prompt mode_change, and attach prompt length
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i].event === 'edit' && sorted[i].origin_mode === 'ai') {
-      // Look back to find ai_prompt event (may be 1-2 events before)
-      for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
-        if (sorted[j].event === 'ai_prompt' && sorted[j].prompt) {
-          sorted[i].aiPromptLength = sorted[j].prompt.length || 0;
-          break;
-        }
-      }
+  // Mark edit events that follow an ai_prompt, and attach prompt length
+  // Track the current active ai_prompt and apply to subsequent AI edits
+  let currentAiPromptLength = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    const evt = sorted[i];
+    if (evt.event === 'ai_prompt' && evt.prompt) {
+      // New ai_prompt - update the current prompt length
+      currentAiPromptLength = evt.prompt.length || 0;
+    } else if (evt.event === 'mode_change' && evt.to === 'human') {
+      // Mode changed to human - reset the ai_prompt tracking
+      currentAiPromptLength = 0;
+    } else if (evt.event === 'edit' && evt.origin_mode === 'ai' && currentAiPromptLength > 0) {
+      // AI edit following an ai_prompt - attach the prompt length
+      evt.aiPromptLength = currentAiPromptLength;
     }
   }
 

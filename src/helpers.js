@@ -47,8 +47,11 @@ export function calculateSeverity(event) {
     // Based on change amount
     const delta = event.delta || {};
     const chars = (delta.added_chars || 0) + (delta.deleted_chars || 0);
-    // clamp01(log1p(chars)/log1p(3000))
-    const severity = clamp(Math.log1p(chars) / Math.log1p(3000), 0, 1);
+    // sqrt(log1p) with higher reference for more gradual saturation
+    // Higher REF value + sqrt = more spread in high-edit areas
+    const REF = 30000;
+    const normalized = Math.log1p(chars) / Math.log1p(REF);
+    const severity = clamp(Math.sqrt(normalized), 0, 1);
     return Math.max(0.1, severity); // minimum 0.1 for edits
   }
 
