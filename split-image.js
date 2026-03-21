@@ -33,21 +33,21 @@ async function splitImageToPDF(inputPath, outputPath) {
   // 画像を読み込んでメタデータを取得
   const image = sharp(inputPath);
   const metadata = await image.metadata();
-  
+
   console.log(`元画像サイズ: ${metadata.width}x${metadata.height}px`);
-  
+
   // 分割後のサイズを計算（実寸印刷のため、A4の印刷可能領域に合わせる）
   // 16分割した全体サイズ = A4 x 16枚
   const totalPrintWidth = A4_WIDTH_PX * COLS;   // 4枚横に並べた幅
   const totalPrintHeight = A4_HEIGHT_PX * ROWS; // 4枚縦に並べた高さ
-  
+
   console.log(`印刷全体サイズ: ${totalPrintWidth}x${totalPrintHeight}px`);
-  
+
   // 元画像を印刷サイズにリサイズ
   const resizedBuffer = await image
     .resize(totalPrintWidth, totalPrintHeight, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
     .toBuffer();
-  
+
   const resizedImage = sharp(resizedBuffer);
   const resizedMetadata = await resizedImage.metadata();
   console.log(`リサイズ後: ${resizedMetadata.width}x${resizedMetadata.height}px`);
@@ -56,7 +56,7 @@ async function splitImageToPDF(inputPath, outputPath) {
   // タイルのサイズ
   const tileWidth = Math.floor(resizedMetadata.width / COLS);
   const tileHeight = Math.floor(resizedMetadata.height / ROWS);
-  
+
   console.log(`タイルサイズ: ${tileWidth}x${tileHeight}px`);
   console.log('');
 
@@ -65,7 +65,7 @@ async function splitImageToPDF(inputPath, outputPath) {
     size: 'A4',
     margin: 0
   });
-  
+
   const writeStream = fs.createWriteStream(outputPath);
   doc.pipe(writeStream);
 
@@ -74,11 +74,11 @@ async function splitImageToPDF(inputPath, outputPath) {
     for (let col = 0; col < COLS; col++) {
       const tileIndex = row * COLS + col + 1;
       console.log(`タイル ${tileIndex}/${TOTAL_TILES} を処理中... (row=${row}, col=${col})`);
-      
+
       // 切り取り位置
       const left = col * tileWidth;
       const top = row * tileHeight;
-      
+
       // タイルを切り出し
       const tileBuffer = await sharp(resizedBuffer)
         .extract({
@@ -89,18 +89,18 @@ async function splitImageToPDF(inputPath, outputPath) {
         })
         .png()
         .toBuffer();
-      
+
       // 最初のページ以外は新しいページを追加
       if (tileIndex > 1) {
         doc.addPage();
       }
-      
+
       // A4ページにタイルを配置（フルページ）
       doc.image(tileBuffer, 0, 0, {
         width: A4_WIDTH_PT,
         height: A4_HEIGHT_PT
       });
-      
+
       // ページ番号とガイドを追加（オプション）
       doc.fontSize(8)
          .fillColor('#999999')
@@ -109,7 +109,7 @@ async function splitImageToPDF(inputPath, outputPath) {
   }
 
   doc.end();
-  
+
   return new Promise((resolve, reject) => {
     writeStream.on('finish', () => {
       console.log('');
@@ -129,7 +129,7 @@ async function splitImageToPDF(inputPath, outputPath) {
 // メイン処理
 async function main() {
   const args = process.argv.slice(2);
-  
+
   if (args.length === 0) {
     console.log('使用方法: node split-image.js <入力画像> [出力PDF]');
     console.log('');
@@ -142,20 +142,20 @@ async function main() {
     console.log('  各ページをA4用紙に実寸印刷し、貼り合わせることで大きなポスターを作成できます。');
     process.exit(1);
   }
-  
+
   const inputPath = path.resolve(args[0]);
-  
+
   // 入力ファイルの存在確認
   if (!fs.existsSync(inputPath)) {
     console.error(`エラー: 入力ファイルが見つかりません: ${inputPath}`);
     process.exit(1);
   }
-  
+
   // 出力パスを決定
-  const outputPath = args[1] 
+  const outputPath = args[1]
     ? path.resolve(args[1])
     : inputPath.replace(/\.[^.]+$/, '_split.pdf');
-  
+
   try {
     await splitImageToPDF(inputPath, outputPath);
   } catch (error) {
