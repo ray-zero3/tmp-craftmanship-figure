@@ -1,143 +1,124 @@
 import p5 from 'p5';
-import { createVisualization, loadData, renderB1Tiles, renderB6, downloadInstructions, downloadSummary } from './visualization.js';
-import { TILE_CONFIG } from './config.js';
+import {
+  loadData,
+  createLayerVisualization,
+  createSeparatedVisualization,
+  renderFull30cm,
+  renderSeparated30cm,
+} from './visualization.js';
 
 let p5Instance = null;
+let currentView = 'combined'; // 'combined' | 'separated'
 
-// Load data first, then create p5.js instance in container
 loadData().then(() => {
   const container = document.getElementById('canvas-container');
-  p5Instance = new p5(createVisualization, container);
+  p5Instance = new p5(createLayerVisualization, container);
 
-  // Setup buttons
-  setupB6RenderButton();
-  setupB1RenderButton();
-  setupDownloadButtons();
+  setupViewToggle();
+  setupExportButtons();
 });
 
-/**
- * Setup the B6 rendering button
- */
-function setupB6RenderButton() {
-  const button = document.getElementById('render-b6-btn');
-  const progressDiv = document.getElementById('render-progress');
+function setupViewToggle() {
+  const combinedBtn = document.getElementById('view-combined-btn');
+  const separatedBtn = document.getElementById('view-separated-btn');
 
-  if (!button) return;
+  if (combinedBtn) {
+    combinedBtn.addEventListener('click', () => {
+      if (currentView === 'combined') return;
+      currentView = 'combined';
+      switchView(createLayerVisualization);
+      combinedBtn.classList.add('active');
+      separatedBtn.classList.remove('active');
+    });
+  }
 
-  button.addEventListener('click', async () => {
-    button.disabled = true;
-    button.textContent = 'Rendering...';
-    progressDiv.style.display = 'block';
-    progressDiv.textContent = 'Rendering B6...';
-
-    try {
-      const canvas = await renderB6(p5Instance);
-
-      progressDiv.textContent = 'Saving...';
-
-      canvas.toBlob((blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'craftlog_B6_300dpi.png';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        progressDiv.textContent = 'Done! B6 image saved.';
-        setTimeout(() => {
-          progressDiv.style.display = 'none';
-          button.disabled = false;
-          button.textContent = 'Render B6 PNG';
-        }, 2000);
-      }, 'image/png');
-
-    } catch (error) {
-      console.error('Error rendering B6:', error);
-      progressDiv.textContent = 'Error: ' + error.message;
-      button.disabled = false;
-      button.textContent = 'Render B6 PNG';
-    }
-  });
+  if (separatedBtn) {
+    separatedBtn.addEventListener('click', () => {
+      if (currentView === 'separated') return;
+      currentView = 'separated';
+      switchView(createSeparatedVisualization);
+      separatedBtn.classList.add('active');
+      combinedBtn.classList.remove('active');
+    });
+  }
 }
 
-/**
- * Setup the B1 tile rendering button
- */
-function setupB1RenderButton() {
-  const button = document.getElementById('render-b1-btn');
-  const progressDiv = document.getElementById('render-progress');
-
-  if (!button) return;
-
-  button.addEventListener('click', async () => {
-    button.disabled = true;
-    button.textContent = 'Rendering...';
-    progressDiv.style.display = 'block';
-    progressDiv.textContent = 'Preparing tiles...';
-
-    try {
-      // Render tiles with progress callback
-      const finalCanvas = await renderB1Tiles(p5Instance, (current, total) => {
-        progressDiv.textContent = `Rendering tile ${current} / ${total}...`;
-      });
-
-      progressDiv.textContent = 'Combining tiles...';
-
-      // Convert to blob and download
-      finalCanvas.toBlob((blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `craftlog_B1_${TILE_CONFIG.cols}x${TILE_CONFIG.rows}_tiles.png`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        progressDiv.textContent = 'Done! Image saved.';
-        setTimeout(() => {
-          progressDiv.style.display = 'none';
-          button.disabled = false;
-          button.textContent = 'Render B1 (8 tiles)';
-        }, 2000);
-      }, 'image/png');
-
-    } catch (error) {
-      console.error('Error rendering tiles:', error);
-      progressDiv.textContent = 'Error: ' + error.message;
-      button.disabled = false;
-      button.textContent = 'Render B1 (8 tiles)';
-    }
-  });
+function switchView(vizFactory) {
+  const container = document.getElementById('canvas-container');
+  if (p5Instance) {
+    p5Instance.remove();
+  }
+  p5Instance = new p5(vizFactory, container);
 }
 
-/**
- * Setup download buttons for instructions and summary
- */
-function setupDownloadButtons() {
-  const instructionsBtn = document.getElementById('download-instructions-btn');
-  const summaryBtn = document.getElementById('download-summary-btn');
+function setupExportButtons() {
   const saveBtn = document.getElementById('save-png-btn');
-
-  if (instructionsBtn) {
-    instructionsBtn.addEventListener('click', () => {
-      downloadInstructions();
-    });
-  }
-
-  if (summaryBtn) {
-    summaryBtn.addEventListener('click', () => {
-      downloadSummary();
-    });
-  }
+  const exportCombinedBtn = document.getElementById('export-combined-btn');
+  const exportLayersBtn = document.getElementById('export-layers-btn');
+  const progressDiv = document.getElementById('render-progress');
 
   if (saveBtn) {
     saveBtn.addEventListener('click', () => {
       if (p5Instance) {
-        p5Instance.saveCanvas('craftlog_lewitt_visualization', 'png');
+        p5Instance.saveCanvas('preview', 'png');
       }
     });
   }
+
+  if (exportCombinedBtn) {
+    exportCombinedBtn.addEventListener('click', async () => {
+      exportCombinedBtn.disabled = true;
+      progressDiv.style.display = 'block';
+      progressDiv.textContent = 'Rendering 30cm combined...';
+
+      try {
+        const canvas = await renderFull30cm(p5Instance);
+        downloadCanvas(canvas, 'combined_30cm_300dpi.png');
+        progressDiv.textContent = 'Done!';
+      } catch (err) {
+        progressDiv.textContent = 'Error: ' + err.message;
+        console.error(err);
+      }
+
+      setTimeout(() => {
+        progressDiv.style.display = 'none';
+        exportCombinedBtn.disabled = false;
+      }, 2000);
+    });
+  }
+
+  if (exportLayersBtn) {
+    exportLayersBtn.addEventListener('click', async () => {
+      exportLayersBtn.disabled = true;
+      progressDiv.style.display = 'block';
+
+      try {
+        progressDiv.textContent = 'Rendering separated layers...';
+        const canvas = await renderSeparated30cm(p5Instance);
+        downloadCanvas(canvas, 'layers_separated_30cm_300dpi.png');
+        progressDiv.textContent = 'Layers exported!';
+      } catch (err) {
+        progressDiv.textContent = 'Error: ' + err.message;
+        console.error(err);
+      }
+
+      setTimeout(() => {
+        progressDiv.style.display = 'none';
+        exportLayersBtn.disabled = false;
+      }, 2000);
+    });
+  }
+}
+
+function downloadCanvas(canvas, filename) {
+  canvas.toBlob((blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 'image/png');
 }

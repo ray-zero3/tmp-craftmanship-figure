@@ -38,6 +38,12 @@ export const TILE_CONFIG = {
   get finalHeight() { return this.tileHeight * this.rows; }
 };
 
+// 30cm × 30cm at 300 DPI (for AI ART meets Art Fair)
+export const SQUARE_30CM = { width: 3543, height: 3543 };
+
+// Preview size for browser display
+export const PREVIEW_SIZE = 800;
+
 // Current paper size setting (change this to resize)
 export const CURRENT_PAPER_SIZE = 'B6';
 

@@ -1,12 +1,15 @@
-import { colors, CANVAS_WIDTH, CANVAS_HEIGHT, sizes, CURRENT_PAPER_SIZE, SCALE_FACTOR, TILE_CONFIG, PAPER_SIZES, LEWITT_CONFIG } from './config.js';
+import { colors, CANVAS_WIDTH, CANVAS_HEIGHT, sizes, CURRENT_PAPER_SIZE, SCALE_FACTOR, TILE_CONFIG, PAPER_SIZES, LEWITT_CONFIG, PREVIEW_SIZE, SQUARE_30CM } from './config.js';
 import { parseJsonl, generateSummary, generateInstructions } from './helpers.js';
 import { drawLeWittGrid, prepareEvents, calculateGridSize } from './lewitt.js';
+import { buildCycles, drawCycleGrid, drawCycleGridSeparated } from './layers.js';
 
 // State
 let events = [];
 let warnings = [];
 let sessionId = '';
 let summary = null;
+let timeSliceData = null;
+let cycleData = null;
 
 // Exported events for tile rendering
 export function getEvents() {
@@ -36,7 +39,11 @@ export async function loadData() {
     // Generate summary
     summary = generateSummary(events, sessionId);
 
+    // Build cycle data for visualization
+    cycleData = buildCycles(events);
+
     console.log(`Loaded ${events.length} events (${warnings.length} warnings)`);
+    console.log(`Cycles: ${cycleData.cycles.length}, maxAI: ${cycleData.maxAiChars}, maxHuman: ${cycleData.maxHumanChars}`);
     if (warnings.length > 0) {
       console.warn('Parse warnings:', warnings);
     }
@@ -238,5 +245,85 @@ export function downloadSummary() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// ============================================================
+// New layer-based visualization (v2)
+// ============================================================
+
+export function getCycleData() {
+  return cycleData;
+}
+
+/**
+ * Create the cycle grid visualization (combined view)
+ */
+export function createLayerVisualization(p) {
+  p.setup = function () {
+    p.createCanvas(PREVIEW_SIZE, PREVIEW_SIZE);
+    p.pixelDensity(1);
+    p.noLoop();
+  };
+
+  p.draw = function () {
+    if (!cycleData) return;
+    drawCycleGrid(p, cycleData, PREVIEW_SIZE);
+  };
+}
+
+/**
+ * Create the separated layers visualization (3 panels)
+ */
+export function createSeparatedVisualization(p) {
+  p.setup = function () {
+    p.createCanvas(PREVIEW_SIZE * 3, PREVIEW_SIZE);
+    p.pixelDensity(1);
+    p.noLoop();
+  };
+
+  p.draw = function () {
+    if (!cycleData) return;
+    drawCycleGridSeparated(p, cycleData, PREVIEW_SIZE);
+  };
+}
+
+/**
+ * Render the combined view at full 30cm resolution
+ */
+export async function renderFull30cm(p) {
+  const size = SQUARE_30CM.width;
+  const g = p.createGraphics(size, size);
+  g.pixelDensity(1);
+
+  drawCycleGrid(g, cycleData, size);
+
+  const outputCanvas = document.createElement('canvas');
+  outputCanvas.width = size;
+  outputCanvas.height = size;
+  const ctx = outputCanvas.getContext('2d');
+  ctx.drawImage(g.canvas, 0, 0);
+  g.remove();
+
+  return outputCanvas;
+}
+
+/**
+ * Render separated layers at full 30cm resolution
+ */
+export async function renderSeparated30cm(p) {
+  const size = SQUARE_30CM.width;
+  const g = p.createGraphics(size * 3, size);
+  g.pixelDensity(1);
+
+  drawCycleGridSeparated(g, cycleData, size);
+
+  const outputCanvas = document.createElement('canvas');
+  outputCanvas.width = size * 3;
+  outputCanvas.height = size;
+  const ctx = outputCanvas.getContext('2d');
+  ctx.drawImage(g.canvas, 0, 0);
+  g.remove();
+
+  return outputCanvas;
 }
 

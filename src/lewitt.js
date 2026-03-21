@@ -78,6 +78,80 @@ export function getHatchParams(severity) {
 }
 
 /**
+ * In this work, the important thing is not collision but feedback.
+ * Each event inherits a faint bias from the previous generated state,
+ * so the grid reads as a loop: instruction -> code -> image -> re-instruction.
+ */
+function getEventActor(event) {
+  if (!event) return 'none';
+  if (event.event === 'edit' && event.origin_mode === 'human') return 'human';
+  if (event.event === 'edit' && event.origin_mode === 'ai') return 'ai';
+  return event.event || 'other';
+}
+
+function getEventInfluence(event) {
+  if (!event || !event.delta) return 0;
+  const total = (event.delta.added_chars || 0) + (event.delta.deleted_chars || 0);
+  return clamp(Math.log1p(total) / Math.log1p(3000), 0, 1);
+}
+
+function createCellState(event, angle, severity, eraseRatio, params, inheritedBias = null, boundaryPoints = []) {
+  return {
+    actor: getEventActor(event),
+    angle: typeof angle === 'number' ? angle : null,
+    severity: severity || 0,
+    eraseRatio: eraseRatio || 0,
+    influence: getEventInfluence(event),
+    spacing: params?.spacing || 0,
+    weight: params?.weight || 0,
+    alpha: params?.alpha || 0,
+    inheritedBias,
+    boundaryPoints
+  };
+}
+
+function deriveInheritedBias(prevState, event) {
+  if (!prevState || !event) return null;
+
+  const actor = getEventActor(event);
+  const prevActor = prevState.actor || 'none';
+  const influence = prevState.influence || 0;
+  const eraseRatio = prevState.eraseRatio || 0;
+  const prevAngle = typeof prevState.angle === 'number' ? prevState.angle : 0;
+
+  if (actor === 'human') {
+    return {
+      actor,
+      carryAngle: prevAngle,
+      carryWeight: 0.18 + influence * 0.28,
+      carrySpacing: 0.10 + eraseRatio * 0.18,
+      eraseEcho: 0.10 + eraseRatio * 0.35,
+      pointEcho: prevState.boundaryPoints || []
+    };
+  }
+
+  if (actor === 'ai') {
+    return {
+      actor,
+      carryAngle: prevAngle,
+      carryWeight: prevActor === 'human' ? 0.10 + influence * 0.14 : 0.06 + influence * 0.08,
+      carrySpacing: prevActor === 'human' ? 0.05 + eraseRatio * 0.08 : 0.04,
+      eraseEcho: eraseRatio * 0.12,
+      pointEcho: []
+    };
+  }
+
+  return {
+    actor,
+    carryAngle: prevAngle,
+    carryWeight: 0.08,
+    carrySpacing: 0.05,
+    eraseEcho: eraseRatio * 0.08,
+    pointEcho: []
+  };
+}
+
+/**
  * Clip a line segment to a rectangle using Liang-Barsky algorithm
  * Returns null if line is completely outside, or clipped [x1,y1,x2,y2]
  */
@@ -116,55 +190,79 @@ function clipLineToRect(x1, y1, x2, y2, rx, ry, rw, rh) {
  * Draw hatching lines in a cell at a given angle
  * @param eraseRatio - ratio (0-1) of cell size to erase from center (for deleted_chars visualization)
  */
-export function drawHatchLines(g, cellX, cellY, cellW, cellH, angleDeg, spacing, weight, alpha, scale = 1, eraseRatio = 0) {
+export function drawHatchLines(g, cellX, cellY, cellW, cellH, angleDeg, spacing, weight, alpha, scale = 1, eraseRatio = 0, inheritedBias = null) {
   const angleRad = (angleDeg * Math.PI) / 180;
   const cos = Math.cos(angleRad);
   const sin = Math.sin(angleRad);
 
-  // Scaled parameters
-  const scaledSpacing = spacing * scale;
-  const scaledWeight = Math.max(0.5, weight * scale);
+  const inheritedSpacingScale = inheritedBias ? (1 - inheritedBias.carrySpacing) : 1;
+  const inheritedWeightBoost = inheritedBias ? inheritedBias.carryWeight : 0;
+  const inheritedEraseEcho = inheritedBias ? inheritedBias.eraseEcho : 0;
+
+  const scaledSpacing = Math.max(2, spacing * scale * inheritedSpacingScale);
+  const scaledWeight = Math.max(0.5, weight * scale * (1 + inheritedWeightBoost));
 
   g.stroke(0, alpha);
   g.strokeWeight(scaledWeight);
 
-  // Calculate the diagonal length of the cell
   const diag = Math.sqrt(cellW * cellW + cellH * cellH);
   const centerX = cellX + cellW / 2;
   const centerY = cellY + cellH / 2;
 
-  // Calculate erase rectangle (centered, proportional to cell)
-  const eraseW = cellW * eraseRatio;
-  const eraseH = cellH * eraseRatio;
-  const eraseRect = eraseRatio > 0 ? {
+  const effectiveEraseRatio = clamp(eraseRatio + inheritedEraseEcho, 0, 0.9);
+  const eraseW = cellW * effectiveEraseRatio;
+  const eraseH = cellH * effectiveEraseRatio;
+  const eraseRect = effectiveEraseRatio > 0 ? {
     x: centerX - eraseW / 2,
     y: centerY - eraseH / 2,
     w: eraseW,
     h: eraseH
   } : null;
 
-  // Number of lines needed
   const numLines = Math.ceil(diag / scaledSpacing) + 2;
 
-  // Draw parallel lines
   for (let i = -numLines; i <= numLines; i++) {
-    // Offset perpendicular to the line direction
     const offsetX = -sin * i * scaledSpacing;
     const offsetY = cos * i * scaledSpacing;
 
-    // Line endpoints (long enough to cover the cell)
     const x1 = centerX + offsetX - cos * diag;
     const y1 = centerY + offsetY - sin * diag;
     const x2 = centerX + offsetX + cos * diag;
     const y2 = centerY + offsetY + sin * diag;
 
-    // Clip to cell bounds
     const clipped = clipLineToRect(x1, y1, x2, y2, cellX, cellY, cellW, cellH);
     if (clipped) {
       if (eraseRect) {
-        // Draw line segments excluding the center rectangle
         drawLineWithRectHole(g, clipped[0], clipped[1], clipped[2], clipped[3], eraseRect);
       } else {
+        g.line(clipped[0], clipped[1], clipped[2], clipped[3]);
+      }
+    }
+  }
+
+  if (inheritedBias && inheritedBias.carryWeight > 0.01 && typeof inheritedBias.carryAngle === 'number') {
+    const ghostAngleRad = (inheritedBias.carryAngle * Math.PI) / 180;
+    const ghostCos = Math.cos(ghostAngleRad);
+    const ghostSin = Math.sin(ghostAngleRad);
+    const ghostSpacing = Math.max(4, scaledSpacing * 2.2);
+    const ghostWeight = Math.max(0.35, scaledWeight * 0.45);
+    const ghostAlpha = Math.max(16, alpha * 0.22);
+    const ghostLines = Math.ceil(diag / ghostSpacing) + 1;
+
+    g.stroke(0, ghostAlpha);
+    g.strokeWeight(ghostWeight);
+
+    for (let i = -ghostLines; i <= ghostLines; i++) {
+      const offsetX = -ghostSin * i * ghostSpacing;
+      const offsetY = ghostCos * i * ghostSpacing;
+
+      const x1 = centerX + offsetX - ghostCos * diag;
+      const y1 = centerY + offsetY - ghostSin * diag;
+      const x2 = centerX + offsetX + ghostCos * diag;
+      const y2 = centerY + offsetY + ghostSin * diag;
+
+      const clipped = clipLineToRect(x1, y1, x2, y2, cellX, cellY, cellW, cellH);
+      if (clipped) {
         g.line(clipped[0], clipped[1], clipped[2], clipped[3]);
       }
     }
@@ -218,7 +316,6 @@ function drawLineWithRectHole(g, x1, y1, x2, y2, rect) {
 
   // Top edge (y = ry)
   if (dy !== 0) {
-    const t = (ry - y1) / dx * (dx / dy);
     const tFixed = (ry - y1) / dy;
     if (tFixed >= 0 && tFixed <= 1) {
       const x = x1 + tFixed * dx;
@@ -481,24 +578,21 @@ export function drawPolicyViolationCell(g, cellX, cellY, cellW, cellH, severity,
 
 /**
  * Draw a single cell with hatching based on event
- * Returns collected boundary points if collectPoints is true
+ * Returns collected boundary points and the resulting cell state
  */
-export function drawCell(g, event, cellX, cellY, cellW, cellH, rng, scale = 1, collectPoints = false) {
+export function drawCell(g, event, prevState, cellX, cellY, cellW, cellH, rng, scale = 1, collectPoints = false) {
   const { hatching } = LEWITT_CONFIG;
   const collectedPoints = [];
 
-  // Draw cell border - thicker/darker for events following ai_prompt
   let borderWeight = Math.max(0.5, hatching.cellBorderWeight * scale);
   let borderAlpha = hatching.cellBorderAlpha;
 
-  // Get prompt length from preceding ai_prompt event
   const promptLength = (event && event.aiPromptLength > 0) ? event.aiPromptLength : 0;
 
   if (promptLength > 0) {
-    // Scale based on prompt length (log scale, 10-1000 chars typical)
     const promptRatio = clamp(Math.log1p(promptLength) / Math.log1p(1000), 0, 1);
     borderWeight = Math.max(1, lerp(1, 4, promptRatio) * scale);
-    borderAlpha = Math.round(lerp(50, 150 , promptRatio));
+    borderAlpha = Math.round(lerp(50, 150, promptRatio));
   }
 
   g.stroke(0, borderAlpha);
@@ -506,49 +600,71 @@ export function drawCell(g, event, cellX, cellY, cellW, cellH, rng, scale = 1, c
   g.noFill();
   g.rect(cellX, cellY, cellW, cellH);
 
-  if (!event) return collectedPoints; // Empty cell
-
-  // Special handling for policy_violation
-  if (event.event === 'policy_violation') {
-    drawPolicyViolationCell(g, cellX, cellY, cellW, cellH, event.severity, scale);
-    return collectedPoints;
+  if (!event) {
+    return {
+      collectedPoints,
+      state: createCellState(null, null, 0, 0, null, null, [])
+    };
   }
 
-  // Get hatching parameters
+  if (event.event === 'policy_violation') {
+    drawPolicyViolationCell(g, cellX, cellY, cellW, cellH, event.severity, scale);
+    return {
+      collectedPoints,
+      state: createCellState(event, null, event.severity, 0, null, null, [])
+    };
+  }
+
   const angle = getHatchAngle(event, rng);
   const params = getHatchParams(event.severity);
+  const inheritedBias = deriveInheritedBias(prevState, event);
 
-  // Calculate erase ratio based on deleted_chars (logarithmic scale)
   let eraseRatio = 0;
   if (event.delta && event.delta.deleted_chars > 0) {
     const deleted = event.delta.deleted_chars;
-    // Map log1p(deleted)/log1p(3000) to 0..0.8 ratio
     eraseRatio = clamp(Math.log1p(deleted) / Math.log1p(3000), 0, 1) * 0.8;
   }
 
-  // Draw main hatching
   if (typeof angle === 'number') {
-    drawHatchLines(g, cellX, cellY, cellW, cellH, angle, params.spacing, params.weight, params.alpha, scale, eraseRatio);
+    drawHatchLines(
+      g,
+      cellX,
+      cellY,
+      cellW,
+      cellH,
+      angle,
+      params.spacing,
+      params.weight,
+      params.alpha,
+      scale,
+      eraseRatio,
+      inheritedBias
+    );
   }
 
-  // Additional motifs for edit events
+  if (event.event === 'edit' && event.origin_mode === 'human' && inheritedBias?.pointEcho?.length) {
+    drawInheritedPointEcho(g, inheritedBias.pointEcho, cellX, cellY, cellW, cellH, scale);
+  }
+
   if (event.event === 'edit') {
-    // Boundary points based on total change amount (added + deleted)
     if (event.delta) {
       const totalChange = (event.delta.added_chars || 0) + (event.delta.deleted_chars || 0);
       if (totalChange > 0) {
-        const count = clamp(
+        let count = clamp(
           Math.round(Math.log1p(totalChange) / 1.6),
           0,
           LEWITT_CONFIG.motifs.radialLinesMaxCount
         );
+
+        if (event.origin_mode === 'human') {
+          count = clamp(count + 1, 0, LEWITT_CONFIG.motifs.radialLinesMaxCount);
+        }
+
         if (count > 0) {
           if (collectPoints) {
-            // Collect boundary intersection points for later connection
             const points = collectBoundaryPoints(cellX, cellY, cellW, cellH, count, rng);
             collectedPoints.push(...points);
           } else {
-            // Draw point-symmetric lines through center
             drawPointSymmetricLines(g, cellX, cellY, cellW, cellH, count, rng, scale);
           }
         }
@@ -556,7 +672,10 @@ export function drawCell(g, event, cellX, cellY, cellW, cellH, rng, scale = 1, c
     }
   }
 
-  return collectedPoints;
+  return {
+    collectedPoints,
+    state: createCellState(event, angle, event.severity, eraseRatio, params, inheritedBias, collectedPoints)
+  };
 }
 
 /**
@@ -675,6 +794,31 @@ function drawPoints(g, points, size, alpha, scale = 1) {
 }
 
 /**
+ * Draw faint echo points inherited from the previous cell.
+ * This makes human re-instruction read as a response to the prior image.
+ */
+function drawInheritedPointEcho(g, points, cellX, cellY, cellW, cellH, scale = 1) {
+  if (!points || points.length === 0) return;
+
+  const maxPoints = Math.min(points.length, 8);
+  const centerX = cellX + cellW / 2;
+  const centerY = cellY + cellH / 2;
+
+  g.fill(0, 45);
+  g.noStroke();
+  const size = Math.max(1.2, 2.6 * scale);
+
+  for (let i = 0; i < maxPoints; i++) {
+    const p = points[i];
+    const px = centerX + (p.x - centerX) * 0.78;
+    const py = centerY + (p.y - centerY) * 0.78;
+    const clampedX = clamp(px, cellX + size, cellX + cellW - size);
+    const clampedY = clamp(py, cellY + size, cellY + cellH - size);
+    g.ellipse(clampedX, clampedY, size, size);
+  }
+}
+
+/**
  * Main LeWitt drawing function
  * @param {boolean} usePointConnectionMode - If true, collect boundary points and connect them instead of drawing radial lines
  */
@@ -705,6 +849,7 @@ export function drawLeWittGrid(g, events, canvasWidth, canvasHeight, config = LE
 
   // Collect all boundary points for nearest neighbor connection
   const allBoundaryPoints = [];
+  let prevState = null;
 
   // Draw each cell using boustrophedon (serpentine) pattern
   // Time flows continuously but alternates direction each row
@@ -737,12 +882,14 @@ export function drawLeWittGrid(g, events, canvasWidth, canvasHeight, config = LE
         }
       }
 
-      const cellPoints = drawCell(g, event, cellX, cellY, cellW, cellH, rng, scale, true);
+      const result = drawCell(g, event, prevState, cellX, cellY, cellW, cellH, rng, scale, true);
+      const cellPoints = result.collectedPoints || [];
 
       if (cellPoints.length > 0) {
         allBoundaryPoints.push(...cellPoints);
       }
 
+      prevState = result.state;
       eventIdx++;
     }
   }
