@@ -195,7 +195,7 @@ function drawCellMotif(g, cell, maxAiChars, maxHumanChars, canvasSize, rng) {
       const dotSize = Math.max(1, 1.3 * scaleFactor);
 
       g.noStroke();
-      g.fill(255);
+      g.fill(128);
 
       for (let d = 0; d < dotCount; d++) {
         const dx = rng.range(innerX, innerX + innerW);
@@ -211,7 +211,7 @@ function drawCellMotif(g, cell, maxAiChars, maxHumanChars, canvasSize, rng) {
     g.fill(255);
     g.rect(innerX, innerY, innerW, innerH);
 
-    // Black stipple dots
+    // Gray stipple dots
     const logMax = Math.log1p(maxHumanChars);
     const raw = Math.log1p(cycle.chars) / logMax;
     const intensity = Math.pow(raw, 3.0);
@@ -225,7 +225,7 @@ function drawCellMotif(g, cell, maxAiChars, maxHumanChars, canvasSize, rng) {
       const dotSize = Math.max(1, 1.3 * scaleFactor);
 
       g.noStroke();
-      g.fill(0);
+      g.fill(128);
 
       for (let d = 0; d < dotCount; d++) {
         const dx = rng.range(innerX, innerX + innerW);
@@ -340,7 +340,7 @@ function drawCycleGridLayer(g, cycleData, canvasSize, layer, config = {}) {
           const dotCount = Math.round(maxDots * intensity);
           const dotSize = Math.max(1, 1.3 * scaleFactor);
           g.noStroke();
-          g.fill(255);
+          g.fill(128);
           for (let d = 0; d < dotCount; d++) {
             const dx = rng.range(innerX, innerX + innerW);
             const dy = rng.range(innerY, innerY + innerH);
@@ -365,7 +365,7 @@ function drawCycleGridLayer(g, cycleData, canvasSize, layer, config = {}) {
           const dotCount = Math.round(maxDots * intensity);
           const dotSize = Math.max(1, 1.3 * scaleFactor);
           g.noStroke();
-          g.fill(0);
+          g.fill(128);
           for (let d = 0; d < dotCount; d++) {
             const dx = rng.range(innerX, innerX + innerW);
             const dy = rng.range(innerY, innerY + innerH);
