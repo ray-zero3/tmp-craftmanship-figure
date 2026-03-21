@@ -1,5 +1,5 @@
 import p5 from 'p5';
-import { createVisualization, loadData, renderB1Tiles, downloadInstructions, downloadSummary } from './visualization.js';
+import { createVisualization, loadData, renderB1Tiles, renderB6, downloadInstructions, downloadSummary } from './visualization.js';
 import { TILE_CONFIG } from './config.js';
 
 let p5Instance = null;
@@ -10,9 +10,57 @@ loadData().then(() => {
   p5Instance = new p5(createVisualization, container);
 
   // Setup buttons
+  setupB6RenderButton();
   setupB1RenderButton();
   setupDownloadButtons();
 });
+
+/**
+ * Setup the B6 rendering button
+ */
+function setupB6RenderButton() {
+  const button = document.getElementById('render-b6-btn');
+  const progressDiv = document.getElementById('render-progress');
+
+  if (!button) return;
+
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    button.textContent = 'Rendering...';
+    progressDiv.style.display = 'block';
+    progressDiv.textContent = 'Rendering B6...';
+
+    try {
+      const canvas = await renderB6(p5Instance);
+
+      progressDiv.textContent = 'Saving...';
+
+      canvas.toBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'craftlog_B6_300dpi.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        progressDiv.textContent = 'Done! B6 image saved.';
+        setTimeout(() => {
+          progressDiv.style.display = 'none';
+          button.disabled = false;
+          button.textContent = 'Render B6 PNG';
+        }, 2000);
+      }, 'image/png');
+
+    } catch (error) {
+      console.error('Error rendering B6:', error);
+      progressDiv.textContent = 'Error: ' + error.message;
+      button.disabled = false;
+      button.textContent = 'Render B6 PNG';
+    }
+  });
+}
 
 /**
  * Setup the B1 tile rendering button

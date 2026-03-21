@@ -159,6 +159,43 @@ function renderLeWittTile(g, offsetX, offsetY, fullWidth, fullHeight, scale) {
 }
 
 /**
+ * Render a B6-sized PNG (1512 × 2150 px at 300 DPI)
+ * Returns a promise that resolves to the rendered canvas
+ */
+export async function renderB6(p) {
+  const { width, height } = PAPER_SIZES.B6;
+
+  // Create off-screen graphics at B6 size with 2x pixel density for quality
+  const g = p.createGraphics(width, height);
+  g.pixelDensity(2);
+
+  // Background
+  g.background(colors.background);
+
+  // Draw the LeWitt grid at B6 size
+  drawLeWittGrid(g, events, width, height, {
+    ...LEWITT_CONFIG,
+    seed: LEWITT_CONFIG.seed || 12345
+  });
+
+  // Create output canvas at native resolution
+  const outputCanvas = document.createElement('canvas');
+  outputCanvas.width = width;
+  outputCanvas.height = height;
+  const ctx = outputCanvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  // Draw from 2x source to 1x output
+  ctx.drawImage(g.canvas, 0, 0, width * 2, height * 2, 0, 0, width, height);
+
+  // Clean up
+  g.remove();
+
+  return outputCanvas;
+}
+
+/**
  * Generate and download instructions.txt
  */
 export function downloadInstructions() {
